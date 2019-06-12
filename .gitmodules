@@ -1,0 +1,4 @@
+[submodule "modules/faceDetector"]
+	path = modules/faceDetector
+	url = git@github.com:prostoiChelovek/faceDetector.git
+	branch = master
