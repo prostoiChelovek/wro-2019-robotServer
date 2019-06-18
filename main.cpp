@@ -62,12 +62,23 @@ int main(int argc, char **argv) {
     sp.addKeyWord("set", {"установи"});
     sp.addKeyWord("temp", {"температура", "температуру"});
     sp.addKeyWord("hum", {"влажность"});
+    sp.addKeyWord("wtrFreq", {"частоту полива"});
+    sp.addKeyWord("open", {"открой"});
+    sp.addKeyWord("close", {"закрой"});
+    sp.addKeyWord("grower", {"теплицу"});
     sp.addKeyWord("on", {"включи"});
     sp.addKeyWord("off", {"выключи"});
+    sp.addKeyWord("tank", {"танк"});
+    sp.addKeyWord("goodbye", {"увидимся позже"});
     sp.addKeyWord("outside", {"на улице", "за окном", "снаружи"});
     sp.addKeyWord("inside", {"внутри", "в помещении", "в доме"});
     sp.addKeyWord("light", {"свет", "освещение"});
     sp.addKeyWord("normal", {"нармальную", "нармальная"});
+    sp.addKeyWord("fwd", {"вперёд"});
+    sp.addKeyWord("back", {"назад"});
+    sp.addKeyWord("stop", {"стоп"});
+    sp.addKeyWord("left", {"влево"});
+    sp.addKeyWord("right", {"вправо"});
 
     map<string, string> lastData;
 
@@ -122,7 +133,8 @@ int main(int argc, char **argv) {
             }
 
             map<string, string> todo;
-            todo = vidProc.processImages(imgs, data);
+            getData(TW_addr, TW_key, TW_thingName, todo);
+            todo = merge(todo, vidProc.processImages(imgs, data));
             string toSay;
             map<string, string> command;
 
@@ -131,14 +143,18 @@ int main(int argc, char **argv) {
             if (data.count("speech")) {
                 sp.parseSpeech(data["speech"], command);
                 toSay = sendCommand(TW_addr, TW_key, TW_thingName, command);
-                todo["say"] = data["speech"];
+//                toSay = sendSpeech(TW_addr, TW_key, TW_thingName, data["speech"]);
+                todo["say"] = toSay;
+            }
+
+            if (data.count("faces") > 0) {
+                if (data["faces"].empty())
+                    data.erase("faces");
             }
 
             if (data != lastData) {
                 sendData(TW_addr, TW_key, TW_thingName, data);
                 lastData = data;
-                if (data.count("faces") != 0)
-                    cout << data["faces"] << endl;
             }
 
             socket.send(buffer(string(serealizeData(todo) + "\n")));

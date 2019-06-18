@@ -45,11 +45,34 @@ public:
         }
         if (kws[0] == "on") {
             if (kws[1] == "light")
-                data["light"] = "3";
+                data["light"] = "1";
         }
         if (kws[0] == "off") {
             if (kws[1] == "light")
                 data["light"] = "0";
+        }
+        if (kws[0] == "tank") {
+            if (kws[1] == "stop")
+                data["tank_direction"] = "0";
+            if (kws[1] == "fwd")
+                data["tank_direction"] = "1";
+            if (kws[1] == "back")
+                data["tank_direction"] = "2";
+            if (kws[1] == "left")
+                data["tank_direction"] = "4";
+            if (kws[1] == "right")
+                data["tank_direction"] = "3";
+        }
+        if (kws[0] == "goodbye") {
+            data["end_work_day"] = "";
+        }
+        if (kws[0] == "open") {
+            if (kws[1] == "grower")
+                data["grower_window"] = "1";
+        }
+        if (kws[0] == "close") {
+            if (kws[1] == "grower")
+                data["grower_window"] = "0";
         }
         if (kws[0] == "set") {
             int val = 0;
@@ -58,10 +81,11 @@ public:
                 numStart = speech.find("влажность") + 19;
             if (kws[1] == "temp") {
                 numStart = speech.find("температуру") + 23;
-                if (numStart == string::npos)
-                    numStart = speech.find("температурa") + 23;
             }
-            string numStr = speech.substr(numStart);
+            if (kws[1] == "wtrFreq") {
+                numStart = speech.find("частоту полива") + string("частоту полива").size();
+            }
+            string numStr = speech.substr(numStart, speech.size());
             if (numStr.find("в ") != string::npos)
                 numStr.replace(0, 3, "");
             vector<int> vals = string2int(numStr);
@@ -69,6 +93,8 @@ public:
                 data["climate_normal_humidity"] = to_string(vals[0]);
             if (kws[1] == "temp")
                 data["climate_normal_temperature"] = to_string(vals[0]);
+            if (kws[1] == "wtrFreq")
+                data["grower_wtrDays"] = to_string(vals[0]);
         }
     }
 
