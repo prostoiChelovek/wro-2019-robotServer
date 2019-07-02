@@ -30,7 +30,7 @@ public:
         faceRecognizer.model->setThreshold(70);
     }
 
-    map<string, string> processImages(vector<Mat> imgs, map<string, string> &data) {
+    void processImages(vector<Mat> imgs, map<string, string> &data, map<string, string> &todo) {
         Mat bgrImg;
         cvtColor(imgs[0], bgrImg, COLOR_GRAY2BGR);
         faceRecognizer.detectFaces(bgrImg);
@@ -51,8 +51,6 @@ public:
             imshow(to_string(i), imgs[i]);
         }
 
-        map<string, string> todo;
-
         if (faceRecognizer.faces.size() == 1) {
             int offset = faceRecognizer.faces[0].offset.x;
             todo["head"] = to_string(offset);
@@ -61,7 +59,6 @@ public:
         faceRecognizer.lastFaces = faceRecognizer.faces;
         char key = waitKey(1);
         processKey(key, imgs[0]);
-        return todo;
     }
 
     void processKey(char key, Mat &frame) {

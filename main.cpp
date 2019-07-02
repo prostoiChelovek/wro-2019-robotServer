@@ -20,7 +20,7 @@ using boost::asio::ip::tcp;
 int port = 1234;
 Size frameSize = Size(640, 480);
 
-const string TW_addr = "0.0.0.0:8008";
+const string TW_addr = "http://niks.duckdns.org:8080";
 const string TW_key = "dd9face6-4dd4-4286-9524-6ab81644d596";
 const string TW_thingName = "butler";
 
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     sp.addKeyWord("on", {"включи"});
     sp.addKeyWord("off", {"выключи"});
     sp.addKeyWord("tank", {"танк"});
-    sp.addKeyWord("goodbye", {"увидимся позже"});
+    sp.addKeyWord("goodbye", {"увидимся позже", "до завтра"});
     sp.addKeyWord("outside", {"на улице", "за окном", "снаружи"});
     sp.addKeyWord("inside", {"внутри", "в помещении", "в доме"});
     sp.addKeyWord("light", {"свет", "освещение"});
@@ -81,6 +81,8 @@ int main(int argc, char **argv) {
     sp.addKeyWord("right", {"вправо"});
 
     map<string, string> lastData;
+
+    Thingworx tw(TW_addr, TW_thingName, TW_key);
 
     log(INFO, "Server started on port", port);
     log(INFO, "Waiting for connections...");
@@ -133,8 +135,18 @@ int main(int argc, char **argv) {
             }
 
             map<string, string> todo;
-            getData(TW_addr, TW_key, TW_thingName, todo);
-            todo = merge(todo, vidProc.processImages(imgs, data));
+            string todoStr = tw.execService("getData", {{}});
+            for (string &s : split(todoStr, ";")) {
+                vector<string> cmd;
+                for (string &c : split(s, ":")) {
+                    cmd.emplace_back(c);
+                }
+                if (cmd.size() == 2) {
+                    todo[cmd[0]] = cmd[1];
+                }
+            }
+
+            vidProc.processImages(imgs, data, todo);
             string toSay;
             map<string, string> command;
 
@@ -142,8 +154,14 @@ int main(int argc, char **argv) {
                 todo["say"] = toSay;
             if (data.count("speech")) {
                 sp.parseSpeech(data["speech"], command);
-                toSay = sendCommand(TW_addr, TW_key, TW_thingName, command);
-//                toSay = sendSpeech(TW_addr, TW_key, TW_thingName, data["speech"]);
+                map<string, string> cmd2send;
+                for (const auto &c : command) {
+                    cmd2send["comName"] = c.first;
+                    if (!c.second.empty())
+                        cmd2send["rawValue"] = c.second;
+                }
+                toSay = tw.execService("post_command", cmd2send);
+//                toSay = tw.execService("process_speech", {{"speech", data["speech"]}});
                 todo["say"] = toSay;
             }
 
@@ -153,7 +171,7 @@ int main(int argc, char **argv) {
             }
 
             if (data != lastData) {
-                sendData(TW_addr, TW_key, TW_thingName, data);
+                tw.execService("post_data", data);
                 lastData = data;
             }
 

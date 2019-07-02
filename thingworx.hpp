@@ -7,6 +7,7 @@
 
 
 #include <string>
+#include <utility>
 #include <vector>
 #include <map>
 #include <sstream>
@@ -19,134 +20,84 @@
 
 using namespace std;
 
-void sendData(const string &addr, const string &key, const string &thingName,
-              const map<string, string> &data) {
-    string recvStr;
-    try {
-        stringstream url;
-        url << addr << "/Thingworx/Things/" << thingName << "/Services/post_data?";
-        url << "appKey=" << key << "&";
-        url << "method=post&";
-        for (const auto &d : data) {
-            if (!d.second.empty())
-                url << d.first << "=" << d.second << "&";
-        }
+class Thingworx {
+public:
+    string url;
+    string thingName;
+    string appKey;
 
-        string urlStr = url.str();
-        if (urlStr[urlStr.size() - 1] == '&')
-            urlStr.pop_back();
+    Thingworx(string url, string thingName, string appKey)
+            : url(std::move(url)), thingName(std::move(thingName)), appKey(std::move(appKey)) {
 
-        curlpp::Easy r;
-        r.setOpt(new curlpp::options::Url(urlStr));
-        r.perform();
-    } catch (exception &e) {
-        log(ERROR, "Cannot send data to thingworx:", e.what());
     }
-}
 
-string sendCommand(const string &addr, const string &key, const string &thingName,
-                   const map<string, string> &cmd) {
-    string recvStr;
-    stringstream ss;
-    try {
-        stringstream url;
-        url << addr << "/Thingworx/Things/" << thingName << "/Services/post_command?";
-        url << "appKey=" << key << "&";
-        url << "method=post&";
-        for (const auto &d : cmd) {
-            url << "comName=" << d.first << "&";
-            if (!d.second.empty())
-                url << "rawValue=" << d.second << "&";
-        }
-        string urlStr = url.str();
-        if (urlStr[urlStr.size() - 1] == '&')
-            urlStr.pop_back();
-
-        curlpp::Easy r;
-        r.setOpt(new curlpp::options::Url(urlStr));
-        std::list<std::string> header;
-        header.emplace_back("Accept: text/csv");
-        r.setOpt(new curlpp::options::HttpHeader(header));
-        ss << r;
-    } catch (exception &e) {
-        log(ERROR, "Cannot send command to thingworx:", e.what());
-    }
-    recvStr = ss.str();
-
-    findAndReplaceAll(recvStr, "result", "");
-    findAndReplaceAll(recvStr, "\"", "");
-    findAndReplaceAll(recvStr, "\n", "");
-    findAndReplaceAll(recvStr, "\r", "");
-    string toSay = recvStr;
-    return toSay.empty() ? "" : toSay;
-}
-
-string sendSpeech(const string &addr, const string &key, const string &thingName,
-                  const string &speech) {
-    string recvStr;
-    stringstream ss;
-    try {
-        stringstream url;
-        url << addr << "/Thingworx/Things/" << thingName << "/Services/process_speech?";
-        url << "appKey=" << key << "&";
-        url << "method=post&";
-        url << "speech=" << speech << "&";
-        string urlStr = url.str();
-        if (urlStr[urlStr.size() - 1] == '&')
-            urlStr.pop_back();
-
-        curlpp::Easy r;
-        r.setOpt(new curlpp::options::Url(urlStr));
-        std::list<std::string> header;
-        header.emplace_back("Accept: text/csv");
-        r.setOpt(new curlpp::options::HttpHeader(header));
-        ss << r;
-    } catch (exception &e) {
-        log(ERROR, "Cannot send command to thingworx:", e.what());
-    }
-    recvStr = ss.str();
-
-    findAndReplaceAll(recvStr, "result", "");
-    findAndReplaceAll(recvStr, "\"", "");
-    findAndReplaceAll(recvStr, "\n", "");
-    findAndReplaceAll(recvStr, "\r", "");
-    string toSay = recvStr;
-    return toSay.empty() ? "" : toSay;
-}
-
-void getData(const string &addr, const string &key, const string &thingName,
-             map<string, string> &data) {
-    stringstream ss;
-    try {
-        stringstream url;
-        url << addr << "/Thingworx/Things/" << thingName << "/Services/getData?";
-        url << "appKey=" << key << "&";
-        url << "method=post";
-        string urlStr = url.str();
-        curlpp::Easy r;
-        r.setOpt(new curlpp::options::Url(urlStr));
-        std::list<std::string> header;
-        header.emplace_back("Accept: text/csv");
-        r.setOpt(new curlpp::options::HttpHeader(header));
-        ss << r;
-        string result = ss.str();
-        findAndReplaceAll(result, "result", "");
-        findAndReplaceAll(result, "\"", "");
-        findAndReplaceAll(result, "\n", "");
-        findAndReplaceAll(result, "\r", "");
-        for (string &s : split(result, ";")) {
-            vector<string> cmd;
-            for (string &c : split(s, ":")) {
-                cmd.emplace_back(c);
+    string sendRequest(const string &collection, const string &name, const string &entity, const string &entityName,
+                       const map<string, string> &data, const string &method = "post") {
+        string addr;
+        try {
+            stringstream ss;
+            stringstream addrSS;
+            addrSS << url << "/Thingworx/" << collection << "/" << name << "/"
+                   << entity << "/" << entityName << "?";
+            for (const auto &d : data) {
+                if (d.first.empty() || d.second.empty())
+                    continue;
+                addrSS << d.first << "=" << d.second << "&";
             }
-            if (cmd.size() == 2) {
-                data[cmd[0]] = cmd[1];
-            }
+            addrSS << "appKey=" << appKey << "&";
+            addrSS << "method=" << method;
+            addr = addrSS.str();
+
+            curlpp::Easy r;
+            r.setOpt(new curlpp::options::Url(addr));
+            std::list<std::string> header;
+            header.emplace_back("Accept: text/csv");
+            r.setOpt(new curlpp::options::HttpHeader(header));
+            r.setOpt(new curlpp::options::ConnectTimeout(10));
+            ss << r;
+
+            string received = ss.str();
+            findAndReplaceAll(received, "result", "");
+            findAndReplaceAll(received, "\"", "");
+            findAndReplaceAll(received, "\n", "");
+            findAndReplaceAll(received, "\r", "");
+            return received;
+        } catch (exception &e) {
+            log(ERROR, "Cannot send request to Thingworx", name + "/" + collection + "/" + entity + "/" + entityName,
+                "with url", addr, " :", e.what());
         }
-    } catch (exception &e) {
-        log(ERROR, "Cannot send command to thingworx:", e.what());
     }
-}
+
+    string execService(const string &thing, const string &service,
+                       const map<string, string> &data) {
+        return sendRequest("Things", thing, "Services", service, data);
+    }
+
+    string execService(const string &service, const map<string, string> &data) {
+        return execService(thingName, service, data);
+    }
+
+    // Argument [properties] can not be null. WTF?
+    string getProperty(const string &thing, const string &property) {
+        return sendRequest("Things", thing, "Properties", property, {{}}, "get");
+    }
+
+    string getProperty(const string &property) {
+        return getProperty(thingName, property);
+    }
+
+    string setProperty(const string &thing, const string &property, const string &value) {
+        string result = sendRequest("Things", thing, "Properties", property, {{"value", value}}, "put");
+        if (!result.empty()) {
+            log(ERROR, "Cannot set value for property", thing + "/" + property, "to", value, " :", result);
+        }
+        return result;
+    }
+
+    string setProperty(const string &property, const string &value) {
+        return setProperty(thingName, property, value);
+    }
+};
 
 
 #endif //VIDEOTRANS_THINGWORX_HPP
