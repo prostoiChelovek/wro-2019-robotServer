@@ -11,7 +11,6 @@
 #include "utils.hpp"
 #include "videoProcessing.hpp"
 #include "dataProcessing.hpp"
-#include "speechParser.hpp"
 #include "thingworx.hpp"
 
 using namespace std;
@@ -50,30 +49,6 @@ int main(int argc, char **argv) {
     faceRecognizer.recognition->setThreshold(70);
 
     VideoProcessor vidProc(faceRecognizer, samplesDir, faceClassifiersFile);
-
-    vector<pair<string, vector<string>>> keyWords;
-    SpeechParser sp(keyWords);
-    sp.addKeyWord("rain", {"идёт дождь"});
-    sp.addKeyWord("set", {"установи"});
-    sp.addKeyWord("temp", {"температура", "температуру"});
-    sp.addKeyWord("hum", {"влажность"});
-    sp.addKeyWord("wtrFreq", {"частоту полива"});
-    sp.addKeyWord("open", {"открой"});
-    sp.addKeyWord("close", {"закрой"});
-    sp.addKeyWord("grower", {"теплицу"});
-    sp.addKeyWord("on", {"включи"});
-    sp.addKeyWord("off", {"выключи"});
-    sp.addKeyWord("tank", {"танк"});
-    sp.addKeyWord("goodbye", {"увидимся позже", "до завтра"});
-    sp.addKeyWord("outside", {"на улице", "за окном", "снаружи"});
-    sp.addKeyWord("inside", {"внутри", "в помещении", "в доме"});
-    sp.addKeyWord("light", {"свет", "освещение"});
-    sp.addKeyWord("normal", {"нармальную", "нармальная"});
-    sp.addKeyWord("fwd", {"вперёд"});
-    sp.addKeyWord("back", {"назад"});
-    sp.addKeyWord("stop", {"стоп"});
-    sp.addKeyWord("left", {"влево"});
-    sp.addKeyWord("right", {"вправо"});
 
     map<string, string> lastData;
 
@@ -142,21 +117,8 @@ int main(int argc, char **argv) {
             }
 
             vidProc.processImages(imgs, data, todo);
-            string toSay;
-            map<string, string> command;
-
-            if (!toSay.empty())
-                todo["say"] = toSay;
             if (data.count("speech")) {
-                sp.parseSpeech(data["speech"], command);
-                map<string, string> cmd2send;
-                for (const auto &c : command) {
-                    cmd2send["comName"] = c.first;
-                    if (!c.second.empty())
-                        cmd2send["rawValue"] = c.second;
-                }
-                toSay = tw.execService("post_command", cmd2send);
-//                toSay = tw.execService("process_speech", {{"speech", data["speech"]}});
+                string toSay = tw.execService("process_speech", {{"speech", data["speech"]}});
                 todo["say"] = toSay;
             }
 
