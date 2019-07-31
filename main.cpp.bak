@@ -6,6 +6,8 @@
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
 
+#include "modules/faceDetector/Faces.h"
+
 #include "utils.hpp"
 #include "videoProcessing.hpp"
 #include "dataProcessing.hpp"
@@ -24,12 +26,15 @@ const string TW_addr = "http://niks.duckdns.org:8080";
 const string TW_key = "dd9face6-4dd4-4286-9524-6ab81644d596";
 const string TW_thingName = "butler";
 
-const string caffeConfigFile = "../modules/faceDetector/deploy.prototxt";
-const string caffeWeightFile = "../modules/faceDetector/res10_300x300_ssd_iter_140000_fp16.caffemodel";
-string imgsDir = "../images";
-string imgsList = "../faces.csv";
-string labelsFile = "../labels.txt";
+string faceDetectorDir = "../modules/faceDetector";
+const string configFile = faceDetectorDir + "/models/deploy.prototxt";
+const string weightFile = faceDetectorDir + "/models/res10_300x300_ssd_iter_140000_fp16.caffemodel";
+string lmsPredictorFile = faceDetectorDir + "/models/shape_predictor_5_face_landmarks.dat";
+string descriptorsNetFIle = faceDetectorDir + "/models/dlib_face_recognition_resnet_model_v1.dat";
 string modelFile = "../model.yml";
+string faceClassifiersFile = "../classifiers.dat";
+string samplesDir = "../samples";
+string labelsFile = "../labels.txt";
 
 int main(int argc, char **argv) {
     if (argc > 1)
@@ -38,23 +43,13 @@ int main(int argc, char **argv) {
     boost::asio::io_service io_service;
     tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), port));
 
-    FaceRecognizer::FaceRecognizer faceRecognizer(frameSize);
-    if (!faceRecognizer.readNet(caffeConfigFile, caffeWeightFile)) {
-        log(ERROR, "Cannot read face recognition net", caffeConfigFile, caffeWeightFile);
-        return EXIT_FAILURE;
-    }
-    if (!faceRecognizer.readRecognitionModel(modelFile)) {
-        log(WARNING, "Cannot open recognition model", modelFile);
-    }
-    if (!faceRecognizer.readLabels(labelsFile)) {
-        log(ERROR, "Cannot read labels", labelsFile);
-        return EXIT_FAILURE;
-    }
-    if (!faceRecognizer.readImageList(imgsList)) {
-        log(ERROR, "Cannot read images list", imgsList);
-        return EXIT_FAILURE;
-    }
-    VideoProcessor vidProc(faceRecognizer, imgsDir, imgsList, modelFile);
+    Faces::Faces faceRecognizer(configFile, weightFile, lmsPredictorFile, "",
+                                descriptorsNetFIle, faceClassifiersFile,
+                                labelsFile);
+    faceRecognizer.detector.confidenceThreshold = .95;
+    faceRecognizer.recognition->setThreshold(70);
+
+    VideoProcessor vidProc(faceRecognizer, samplesDir, faceClassifiersFile);
 
     vector<pair<string, vector<string>>> keyWords;
     SpeechParser sp(keyWords);
