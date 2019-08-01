@@ -30,8 +30,8 @@ public:
 
     void processImages(vector<Mat> imgs, map<string, string> &data, map<string, string> &todo) {
         Mat bgrImg;
-        cvtColor(imgs[0], bgrImg, COLOR_GRAY2BGR);
-        faces(bgrImg);
+//        cvtColor(imgs[0], bgrImg, COLOR_GRAY2BGR);
+        faces(imgs[0]);
 
         if (!faces.detector.faces.empty())
             data["faces"] = "";

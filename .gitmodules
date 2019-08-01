@@ -2,3 +2,6 @@
 	path = modules/faceDetector
 	url = git@github.com:prostoiChelovek/faceDetector.git
 	branch = master
+[submodule "modules/paho.mqtt.cpp"]
+	path = modules/paho.mqtt.cpp
+	url = https://github.com/eclipse/paho.mqtt.cpp.git
