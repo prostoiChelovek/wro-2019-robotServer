@@ -17,7 +17,7 @@ include_directories(modules/paho.mqtt.cpp/src)
 add_subdirectory(modules/faceDetector)
 add_subdirectory(modules/paho.mqtt.cpp)
 
-set(SOURCE_FILES main.cpp videoProcessing.hpp utils.hpp dataProcessing.hpp)
+set(SOURCE_FILES main.cpp videoProcessing.hpp utils.hpp dataProcessing.hpp Stereo.hpp)
 add_executable(videoTrans ${SOURCE_FILES})
 
 target_link_libraries(videoTrans ${CURL_LIBRARIES})

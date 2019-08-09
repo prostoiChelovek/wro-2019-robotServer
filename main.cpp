@@ -1,11 +1,10 @@
 #include <iostream>
 #include <map>
 
-#include "opencv2/opencv.hpp"
+#include <opencv2/opencv.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
-#include <utility>
 
 #include <mqtt/async_client.h>
 
@@ -20,6 +19,8 @@ using namespace cv;
 using namespace boost::asio;
 using boost::asio::ip::tcp;
 
+// Parameters ->
+
 int port = 1234;
 Size frameSize = Size(640, 480);
 
@@ -28,20 +29,29 @@ const string TW_username = "mojordomo";
 const string TW_pwd = "12345678";
 const string TW_topic = "butler";
 const string TW_id = "0";
-vector<string> TW_subscribe{"say"};
+const vector<string> TW_subscribe{"say"};
 const int mqtt_qos = 1;
 const string mqtt_persist_dir = "data-persist";
 
-string faceDetectorDir = "../modules/faceDetector";
+const string faceDetectorDir = "../modules/faceDetector";
+const string dataDir = "../data";
 const string configFile = faceDetectorDir + "/models/deploy.prototxt";
 const string weightFile = faceDetectorDir + "/models/res10_300x300_ssd_iter_140000_fp16.caffemodel";
-string lmsPredictorFile = faceDetectorDir + "/models/shape_predictor_5_face_landmarks.dat";
-string descriptorsNetFIle = faceDetectorDir + "/models/dlib_face_recognition_resnet_model_v1.dat";
-string faceClassifiersFile = "../classifiers.dat";
-string samplesDir = "../samples";
-string labelsFile = "../labels.txt";
+const string lmsPredictorFile = faceDetectorDir + "/models/shape_predictor_5_face_landmarks.dat";
+const string descriptorsNetFIle = faceDetectorDir + "/models/dlib_face_recognition_resnet_model_v1.dat";
+const string faceClassifiersFile = dataDir + "/classifiers.dat";
+const string samplesDir = dataDir + "/samples";
+const string faceChecker = dataDir + "/faceChecker.dat";
+const string labelsFile = dataDir + "/labels.txt";
+
+const string intrinsicFile = dataDir + "/intrinsics.yml";
+const string extrinsicFile = dataDir + "/extrinsics.yml";
+
+// <- Parameters
 
 SharedQueue<pair<string, string>> mqttMessages;
+
+// MQTT stuff ->
 
 class action_listener : public virtual mqtt::iaction_listener {
     std::string name_;
@@ -56,12 +66,6 @@ public:
     explicit action_listener(std::string name) : name_(std::move(name)) {}
 };
 
-/**
- * Local callback & listener class for use with the client connection.
- * This is primarily intended to receive messages, but it will also monitor
- * the connection to the broker. If the connection is lost, it will attempt
- * to restore the connection and re-subscribe to the topic.
- */
 class callback : public virtual mqtt::callback,
                  public virtual mqtt::iaction_listener {
     // Counter for the number of connection retries
@@ -91,7 +95,7 @@ class callback : public virtual mqtt::callback,
     void on_success(const mqtt::token &tok) override {}
 
     void connected(const std::string &cause) override {
-        for (string &topic : TW_subscribe) {
+        for (const string &topic : TW_subscribe) {
             cli_.subscribe(TW_topic + "/" + TW_id + "/" + topic, mqtt_qos, nullptr, subListener_);
         }
     }
@@ -115,11 +119,13 @@ public:
             : nretry_(0), cli_(cli), connOpts_(connOpts), subListener_("Subscription") {}
 };
 
-
 void publishData(mqtt::async_client &cli, const string &topic, const string &data) {
     mqtt::topic top(cli, TW_topic + "/" + TW_id + "/" + topic, mqtt_qos, true);
     top.publish(data);
 }
+
+// <- MQTT stuff
+
 
 int main(int argc, char **argv) {
     if (argc > 1)
@@ -132,13 +138,17 @@ int main(int argc, char **argv) {
 
     // Init face recognition module ->
     Faces::Faces faceRecognizer(configFile, weightFile, lmsPredictorFile, "",
-                                descriptorsNetFIle, faceClassifiersFile,
+                                descriptorsNetFIle, faceClassifiersFile, faceChecker,
                                 labelsFile);
     faceRecognizer.detector.confidenceThreshold = .95;
-    faceRecognizer.recognition->setThreshold(70);
+    faceRecognizer.recognition->setThreshold(.3);
+    faceRecognizer.detectFreq = 3;
+    faceRecognizer.recognizeFreq = 9;
     // <- Init face recognition module
 
-    VideoProcessor vidProc(faceRecognizer, samplesDir, faceClassifiersFile);
+    Stereo stereo(intrinsicFile, extrinsicFile, frameSize);
+
+    VideoProcessor vidProc(faceRecognizer, stereo, samplesDir, faceClassifiersFile);
 
     // Connect to tihngworx mqtt ->
     mqtt::async_client twMqtt(TW_addr, TW_topic + "-" + TW_id, mqtt_persist_dir);
@@ -158,9 +168,14 @@ int main(int argc, char **argv) {
     }
     // <- Connect to tihngworx mqtt
 
+    thread([]() {
+        system("cd ~/projects/videoTrans/client/cmake-build-debug && ./videoTrans 127.0.0.1 12345");
+    }).detach();
+
     log(INFO, "Server started on port", port);
     log(INFO, "Waiting for connections...");
     while (true) {
+        // Receive image and data from robot
         tcp::socket socket(io_service);
         acceptor.accept(socket);
         log(INFO, "New connection");

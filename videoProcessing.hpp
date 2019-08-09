@@ -8,22 +8,27 @@
 #include <string>
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/ml.hpp>
 
 #include "utils.hpp"
 
 #include "modules/faceDetector/Faces.h"
+
+#include "Stereo.hpp"
 
 using namespace std;
 using namespace cv;
 
 class VideoProcessor {
 public:
-    Faces::Faces faces;
+    Faces::Faces &faces;
+    Stereo &stereo;
 
     string faceSamplesDir, faceRecognizerFIle;
 
-    VideoProcessor(Faces::Faces faceRecognizer, string faceSamplesDir, string faceRecognizerFIle)
-            : faces(faceRecognizer), faceSamplesDir(faceSamplesDir),
+    VideoProcessor(Faces::Faces &faceRecognizer, Stereo &stereo, string faceSamplesDir, string faceRecognizerFIle)
+            : faces(faceRecognizer), stereo(stereo),
+              faceSamplesDir(faceSamplesDir),
               faceRecognizerFIle(faceRecognizerFIle) {
 
     }
@@ -31,23 +36,33 @@ public:
     void processImages(vector<Mat> imgs, map<string, string> &data, map<string, string> &todo) {
         Mat bgrImg;
 //        cvtColor(imgs[0], bgrImg, COLOR_GRAY2BGR);
-        faces(imgs[0]);
+        int imgNum = 0;
+
+        Mat disp, dispL, dispR;
+        if (imgs.size() > 1) {
+            disp = stereo.compute(imgs[1], imgs[0], dispL, dispR);
+            imgNum = 1;
+            faces(imgs[imgNum], disp);
+        } else
+            faces(imgs[imgNum]);
 
         if (!faces.detector.faces.empty())
             data["faces"] = "";
         for (auto &f : faces.detector.faces) {
-            string label = "unknown";
-            if (f.label != -1)
+            string label;
+            if (f.getLabel() > -1) {
                 label = faces.recognition->labels[f.label];
+            } else if (f.getLabel() == -1) {
+                label = "unknown";
+            } else if (f.getLabel() == -4) {
+                label = "fake";
+            } else {
+                continue;
+            }
             data["faces"] += label + ",";
         }
         if (!data["faces"].empty())
             data["faces"].pop_back();
-
-        faces.draw(imgs[0]);
-        for (int i = 0; i < imgs.size(); i++) {
-            imshow(to_string(i), imgs[i]);
-        }
 
         if (faces.detector.faces.size() == 1) {
             int offset = faces.detector.faces[0].offset.x;
@@ -55,8 +70,70 @@ public:
         }
 
         faces.update();
+
+        show(imgs, disp, dispL, dispR, imgNum);
+
         char key = waitKey(1);
         processKey(key, imgs[0]);
+        if (!faces.detector.faces.empty()) {
+            Faces::Face &f = faces.detector.faces[0];
+            Mat faceDisp = disp(f.rect);
+            if (key == 'f') {
+                faces.checker.addTrainSample(faceDisp, faceSamplesDir, false);
+                log(INFO, "Fake face sample saved to", faceSamplesDir);
+            }
+            if (key == 'r') {
+                faces.checker.addTrainSample(faceDisp, faceSamplesDir, true);
+                log(INFO, "Real face sample saved to", faceSamplesDir);
+            }
+        }
+    }
+
+    void show(vector<Mat> &imgs, Mat &disp, Mat &dispL, Mat &dispR, int imgNum) {
+        faces.draw(imgs[imgNum]);
+
+        if (imgs.size() > 1) {
+            Mat disps;
+            vconcat(dispL, dispR, disps);
+            resize(disps, disps, Size(disps.cols, disps.rows) / 2);
+            Mat allDisps;
+            hconcat(disp, disps, allDisps);
+            imshow("Disparites", allDisps);
+
+            // Draw face disparities ->
+            int max_vert = imgs[0].rows / faces.detector.faceSize.height;
+            int vert = 0, hor = 0;
+            int cols = (faces.detector.faces.size() / max_vert) * faces.detector.faceSize.width;
+            if (cols == 0 && !faces.detector.faces.empty())
+                cols = faces.detector.faceSize.width;
+            cv::Mat facesDisps(imgs[0].rows, cols, 16, cv::Scalar(255, 255, 255));
+            for (Faces::Face &f : faces.detector.faces) {
+                if (vert < max_vert) {
+                    cv::Rect r = cv::Rect(
+                            hor * faces.detector.faceSize.width,
+                            vert * faces.detector.faceSize.height,
+                            faces.detector.faceSize.width,
+                            faces.detector.faceSize.height
+                    );
+                    Mat faceDisp = disp(f.rect);
+                    cv::resize(faceDisp, faceDisp, faces.detector.faceSize);
+                    Mat dispBGR;
+                    cv::cvtColor(faceDisp, dispBGR, cv::COLOR_GRAY2BGR);
+                    dispBGR.copyTo(facesDisps(r));
+
+                    vert++;
+                } else {
+                    hor++;
+                    vert = 0;
+                }
+            }
+            cv::hconcat(std::vector<cv::Mat>{imgs[imgNum], facesDisps}, imgs[imgNum]);
+            // <- Draw face disparities
+        }
+
+        for (int i = 0; i < imgs.size(); i++) {
+            imshow(to_string(i), imgs[i]);
+        }
     }
 
     void processKey(char key, Mat &frame) {
@@ -95,7 +172,9 @@ public:
         if (key == 't') {
             faces.recognition->train(faceSamplesDir);
             faces.recognition->save(faceRecognizerFIle);
-            log(INFO, "Recognition model trained");
+            faces.checker.train(faceSamplesDir);
+            faces.checker.save();
+            log(INFO, "Models trained");
         }
     }
 
