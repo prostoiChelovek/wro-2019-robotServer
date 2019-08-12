@@ -118,11 +118,18 @@ public:
 
         Mat dispL, dispR, dispFiltered, dispFiltered8;
 
-        matcherL->compute(grayL, grayR, dispL);
-        normalize(dispL, dispL8, 0, 255, NORM_MINMAX, CV_8U);
+        std::future<void> future_dispL = std::async(std::launch::async, [&] {
+            matcherL->compute(grayL, grayR, dispL);
+            normalize(dispL, dispL8, 0, 255, NORM_MINMAX, CV_8U);
+        });
 
-        matcherR->compute(grayR, grayL, dispR);
-        normalize(dispR, dispR8, 0, 255, NORM_MINMAX, CV_8U);
+        std::future<void> future_dispR = std::async(std::launch::async, [&] {
+            matcherR->compute(grayR, grayL, dispR);
+            normalize(dispR, dispR8, 0, 255, NORM_MINMAX, CV_8U);
+        });
+
+        future_dispL.wait();
+        future_dispR.wait();
 
         wls_filter->filter(dispL, grayL, dispFiltered, dispR, Rect(), grayR);
         normalize(dispFiltered, dispFiltered8, 0, 255, NORM_MINMAX, CV_8U);

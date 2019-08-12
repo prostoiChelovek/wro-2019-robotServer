@@ -39,12 +39,30 @@ public:
         int imgNum = 0;
 
         Mat disp, dispL, dispR;
+        std::future<void> future_disp;
         if (imgs.size() > 1) {
-            disp = stereo.compute(imgs[1], imgs[0], dispL, dispR);
             imgNum = 1;
-            faces(imgs[imgNum], disp);
-        } else
+            future_disp = std::async(std::launch::async, [&] {
+                disp = stereo.compute(imgs[1], imgs[0], dispL, dispR);
+            });
+        }
+        std::future<void> future_faces = std::async(std::launch::async, [&] {
             faces(imgs[imgNum]);
+        });
+
+        if (imgs.size() > 1) {
+            future_disp.wait();
+        }
+        future_faces.wait();
+        if (imgs.size() > 1) {
+            for (Faces::Face &f : faces.detector.faces) {
+                cv::Mat faceDisp = disp(f.rect);
+                cv::resize(faceDisp, faceDisp, faces.faceSize);
+                bool real = faces.checker.check(faceDisp);
+                if (!real)
+                    f.setLabel(-4);
+            }
+        }
 
         if (!faces.detector.faces.empty())
             data["faces"] = "";
