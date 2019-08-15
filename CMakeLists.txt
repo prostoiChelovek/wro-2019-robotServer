@@ -3,8 +3,10 @@ project(videoTrans)
 
 set(CMAKE_CXX_STANDARD 11)
 
-set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O4 -march=native")
+#set(CMAKE_BUILD_TYPE Release)
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O4 -march=native")
+set(USE_SSE4_INSTRUCTIONS ON)
+set(USE_AVX_INSTRUCTIONS ON)
 
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -20,7 +22,7 @@ include_directories(modules/paho.mqtt.cpp/src)
 add_subdirectory(modules/faceDetector)
 add_subdirectory(modules/paho.mqtt.cpp)
 
-set(SOURCE_FILES main.cpp videoProcessing.hpp utils.hpp dataProcessing.hpp Stereo.hpp)
+set(SOURCE_FILES main.cpp videoProcessing.hpp utils.hpp dataProcessing.hpp Stereo.hpp NeuralNet.hpp)
 add_executable(videoTrans ${SOURCE_FILES})
 
 target_link_libraries(videoTrans ${CURL_LIBRARIES})

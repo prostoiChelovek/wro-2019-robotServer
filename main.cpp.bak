@@ -11,6 +11,7 @@
 #include "modules/faceDetector/Faces.h"
 
 #include "utils.hpp"
+#include "NeuralNet.hpp"
 #include "videoProcessing.hpp"
 #include "dataProcessing.hpp"
 
@@ -35,17 +36,23 @@ const string mqtt_persist_dir = "data-persist";
 
 const string faceDetectorDir = "../modules/faceDetector";
 const string dataDir = "../data";
-const string configFile = faceDetectorDir + "/models/deploy.prototxt";
-const string weightFile = faceDetectorDir + "/models/res10_300x300_ssd_iter_140000_fp16.caffemodel";
+const string facesConfigFile = faceDetectorDir + "/models/deploy.prototxt";
+const string facesWeightFile = faceDetectorDir + "/models/res10_300x300_ssd_iter_140000_fp16.caffemodel";
 const string lmsPredictorFile = faceDetectorDir + "/models/shape_predictor_5_face_landmarks.dat";
 const string descriptorsNetFIle = faceDetectorDir + "/models/dlib_face_recognition_resnet_model_v1.dat";
 const string faceClassifiersFile = dataDir + "/classifiers.dat";
 const string samplesDir = dataDir + "/samples";
 const string faceChecker = dataDir + "/faceChecker.dat";
 const string labelsFile = dataDir + "/labels.txt";
+const string dnnDir = dataDir + "/ssd_mobilenet_v2_coco_2018_03_29";
+const string configFile = dnnDir + "/config.pbtxt";
+const string weightsFile = dnnDir + "/frozen_inference_graph.pb";
+const string netLabelsFile = dnnDir + "/object_detection_classes_coco.txt";
 
 const string intrinsicFile = dataDir + "/intrinsics.yml";
 const string extrinsicFile = dataDir + "/extrinsics.yml";
+
+bool recordVideo = true;
 
 // <- Parameters
 
@@ -137,7 +144,7 @@ int main(int argc, char **argv) {
     // <- TCP server for receive data from robot
 
     // Init face recognition module ->
-    Faces::Faces faceRecognizer(configFile, weightFile, lmsPredictorFile, "",
+    Faces::Faces faceRecognizer(facesConfigFile, facesWeightFile, lmsPredictorFile, "",
                                 descriptorsNetFIle, faceClassifiersFile, faceChecker,
                                 labelsFile);
     faceRecognizer.detector.confidenceThreshold = .95;
@@ -148,7 +155,9 @@ int main(int argc, char **argv) {
 
     Stereo stereo(intrinsicFile, extrinsicFile, frameSize);
 
-    VideoProcessor vidProc(faceRecognizer, stereo, samplesDir, faceClassifiersFile);
+    NeuralNet net(weightsFile, configFile, netLabelsFile);
+
+    VideoProcessor vidProc(faceRecognizer, stereo, net, samplesDir, faceClassifiersFile);
 
     // Connect to tihngworx mqtt ->
     mqtt::async_client twMqtt(TW_addr, TW_topic + "-" + TW_id, mqtt_persist_dir);
@@ -167,6 +176,11 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
     // <- Connect to tihngworx mqtt
+
+    // Video recording ->
+    //VideoWriter writerL("camL.avi", VideoWriter::fourcc('M','J','P','G'), 10, frameSize);
+    //VideoWriter writerR("camR.avi", VideoWriter::fourcc('M','J','P','G'), 10, frameSize);
+    // <- Video recording
 
     thread([]() {
         system("cd ~/projects/videoTrans/client/cmake-build-debug && ./videoTrans 127.0.0.1 12345");
@@ -224,9 +238,21 @@ int main(int argc, char **argv) {
                 imgs.emplace_back(img(roi));
             }
 
+/*            if(recordVideo) {
+                if(imgs.size() >= 2)
+                    writerL.write(imgs[1]);
+                writerR.write(imgs[0]);
+            }
+*/
+
             map<string, string> todo;
 
+            auto start = std::chrono::high_resolution_clock::now();
             vidProc.processImages(imgs, data, todo);
+            auto stop = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+            std::cout << duration.count() << std::endl;
+
             if (data.count("speech")) {
                 publishData(twMqtt, "listened", data["speech"]);
             }

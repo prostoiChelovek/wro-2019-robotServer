@@ -15,6 +15,7 @@
 #include "modules/faceDetector/Faces.h"
 
 #include "Stereo.hpp"
+#include "NeuralNet.hpp"
 
 using namespace std;
 using namespace cv;
@@ -23,11 +24,13 @@ class VideoProcessor {
 public:
     Faces::Faces &faces;
     Stereo &stereo;
+    NeuralNet &net;
 
     string faceSamplesDir, faceRecognizerFIle;
 
-    VideoProcessor(Faces::Faces &faceRecognizer, Stereo &stereo, string faceSamplesDir, string faceRecognizerFIle)
-            : faces(faceRecognizer), stereo(stereo),
+    VideoProcessor(Faces::Faces &faceRecognizer, Stereo &stereo, NeuralNet &net,
+                   string faceSamplesDir, string faceRecognizerFIle)
+            : faces(faceRecognizer), stereo(stereo), net(net),
               faceSamplesDir(faceSamplesDir),
               faceRecognizerFIle(faceRecognizerFIle) {
 
@@ -49,6 +52,8 @@ public:
         std::future<void> future_faces = std::async(std::launch::async, [&] {
             faces(imgs[imgNum]);
         });
+
+        net.predict(imgs[imgNum]);
 
         if (imgs.size() > 1) {
             future_disp.wait();
@@ -93,22 +98,26 @@ public:
 
         char key = waitKey(1);
         processKey(key, imgs[0]);
-        if (!faces.detector.faces.empty()) {
-            Faces::Face &f = faces.detector.faces[0];
-            Mat faceDisp = disp(f.rect);
-            if (key == 'f') {
-                faces.checker.addTrainSample(faceDisp, faceSamplesDir, false);
-                log(INFO, "Fake face sample saved to", faceSamplesDir);
-            }
-            if (key == 'r') {
-                faces.checker.addTrainSample(faceDisp, faceSamplesDir, true);
-                log(INFO, "Real face sample saved to", faceSamplesDir);
+        if (imgs.size() >= 2) {
+            if (!faces.detector.faces.empty()) {
+                Faces::Face &f = faces.detector.faces[0];
+                Mat faceDisp = disp(f.rect);
+                if (key == 'f') {
+                    faces.checker.addTrainSample(faceDisp, faceSamplesDir, false);
+                    log(INFO, "Fake face sample saved to", faceSamplesDir);
+                }
+                if (key == 'r') {
+                    faces.checker.addTrainSample(faceDisp, faceSamplesDir, true);
+                    log(INFO, "Real face sample saved to", faceSamplesDir);
+                }
             }
         }
     }
 
     void show(vector<Mat> &imgs, Mat &disp, Mat &dispL, Mat &dispR, int imgNum) {
         faces.draw(imgs[imgNum]);
+
+        net.draw(imgs[imgNum]);
 
         if (imgs.size() > 1) {
             Mat disps;
