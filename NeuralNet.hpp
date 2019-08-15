@@ -37,6 +37,10 @@ public:
     Size inpSize = Size(300, 300);
 
     vector<string> labels;
+    // only this ids of labels will be saved to predictions
+    // not using if empty
+    vector<int> onlyLabels;
+
     std::vector<String> outNames;
 
     vector<Prediction> predictions;
@@ -120,8 +124,14 @@ public:
         std::vector<int> indices;
         NMSBoxes(boxes, confidences, confThreshold, nmsThreshold, indices);
         predictions.clear();
-        for (int idx : indices)
+        for (int idx : indices) {
+            if (!onlyLabels.empty()) {
+                if (find(onlyLabels.begin(), onlyLabels.end(), classIds[idx]) == onlyLabels.end())
+                    continue;
+            }
+
             predictions.emplace_back(boxes[idx], confidences[idx], classIds[idx]);
+        }
     }
 
     void draw(Mat &img, Scalar color = Scalar(0, 255, 0)) {

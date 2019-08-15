@@ -156,6 +156,8 @@ int main(int argc, char **argv) {
     Stereo stereo(intrinsicFile, extrinsicFile, frameSize);
 
     NeuralNet net(weightsFile, configFile, netLabelsFile);
+    // only person
+    net.onlyLabels = {0};
 
     VideoProcessor vidProc(faceRecognizer, stereo, net, samplesDir, faceClassifiersFile);
 
