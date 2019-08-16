@@ -14,6 +14,8 @@
 
 #include "modules/faceDetector/Faces.h"
 
+#include "modules/Filter.h"
+
 #include "Stereo.hpp"
 #include "NeuralNet.hpp"
 
@@ -24,13 +26,20 @@ class VideoProcessor {
 public:
     Faces::Faces &faces;
     Stereo &stereo;
-    NeuralNet &net;
+    NeuralNet &netL;
+    NeuralNet &netR;
+
+    Scalar processNoiseCov = Scalar::all(1e-2);
+    Scalar measurementNoiseCov = Scalar::all(1e-2);
+    Scalar errorCovPost = Scalar::all(.3);
 
     string faceSamplesDir, faceRecognizerFIle;
 
-    VideoProcessor(Faces::Faces &faceRecognizer, Stereo &stereo, NeuralNet &net,
+    Mat triangulatedPoints3D;
+
+    VideoProcessor(Faces::Faces &faceRecognizer, Stereo &stereo, NeuralNet &netL, NeuralNet &netR,
                    string faceSamplesDir, string faceRecognizerFIle)
-            : faces(faceRecognizer), stereo(stereo), net(net),
+            : faces(faceRecognizer), stereo(stereo), netL(netL), netR(netR),
               faceSamplesDir(faceSamplesDir),
               faceRecognizerFIle(faceRecognizerFIle) {
 
@@ -53,7 +62,20 @@ public:
             faces(imgs[imgNum]);
         });
 
-        net.predict(imgs[imgNum]);
+        std::future<void> future_detect = std::async(std::launch::async, [&] {
+            std::future<void> future_R;
+            if (imgs.size() >= 2) {
+                future_R = std::async(std::launch::async, [&] {
+                    netR.predict(imgs[1]);
+                });
+            }
+
+            netL.predict(imgs[0]);
+
+            if (imgs.size() >= 2) {
+                future_R.wait();
+            }
+        });
 
         if (imgs.size() > 1) {
             future_disp.wait();
@@ -92,6 +114,36 @@ public:
             todo["head"] = to_string(offset);
         }
 
+        future_detect.wait();
+
+        if (netL.predictions.size() == netR.predictions.size() && !netL.predictions.empty()) {
+            vector<Point2d> cam0Pts;
+            vector<Point2d> cam1Pts;
+            auto addPreds = [&](vector<Prediction> &preds, vector<Point2d> &vec) {
+                for (Prediction &pred : preds) {
+                    Point2d pt(pred.rect.x + pred.rect.width / 2,
+                               pred.rect.y + pred.rect.height / 2);
+                    vec.emplace_back(pt);
+                }
+            };
+            addPreds(netL.predictions, cam0Pts);
+            addPreds(netR.predictions, cam1Pts);
+
+            if (cam0Pts.size() == cam1Pts.size() && !cam0Pts.empty()) {
+                circle(imgs[0], cam0Pts[0], 4, Scalar(0, 255, 0), FILLED);
+                circle(imgs[1], cam1Pts[0], 4, Scalar(0, 255, 0), FILLED);
+
+                Mat pnts3D(4, cam0Pts.size(), CV_64F);
+
+                triangulatePoints(stereo.P1, stereo.P2, cam0Pts, cam1Pts, pnts3D);
+                transpose(pnts3D, triangulatedPoints3D);
+                convertPointsFromHomogeneous(triangulatedPoints3D, triangulatedPoints3D);
+
+//                log(INFO, pnts3D);
+                log(INFO, triangulatedPoints3D);
+            }
+        }
+
         faces.update();
 
         show(imgs, disp, dispL, dispR, imgNum);
@@ -117,9 +169,10 @@ public:
     void show(vector<Mat> &imgs, Mat &disp, Mat &dispL, Mat &dispR, int imgNum) {
         faces.draw(imgs[imgNum]);
 
-        net.draw(imgs[imgNum]);
-
+        netL.draw(imgs[0]);
         if (imgs.size() > 1) {
+            netR.draw(imgs[1]);
+
             Mat disps;
             vconcat(dispL, dispR, disps);
             resize(disps, disps, Size(disps.cols, disps.rows) / 2);
@@ -154,7 +207,7 @@ public:
                     vert = 0;
                 }
             }
-            cv::hconcat(std::vector<cv::Mat>{imgs[imgNum], facesDisps}, imgs[imgNum]);
+            cv::hconcat(vector<cv::Mat>{imgs[imgNum], facesDisps}, imgs[imgNum]);
             // <- Draw face disparities
         }
 

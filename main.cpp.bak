@@ -151,15 +151,22 @@ int main(int argc, char **argv) {
     faceRecognizer.recognition->setThreshold(.3);
     faceRecognizer.detectFreq = 3;
     faceRecognizer.recognizeFreq = 9;
+    faceRecognizer.checker.threshold = 0;
     // <- Init face recognition module
 
     Stereo stereo(intrinsicFile, extrinsicFile, frameSize);
 
-    NeuralNet net(weightsFile, configFile, netLabelsFile);
+    // Init neural networks ->
+    // load two same networks for left and right frames
+    // it used in point triangulation
+    NeuralNet netL(weightsFile, configFile, netLabelsFile);
+    NeuralNet netR(weightsFile, configFile, netLabelsFile);
     // only person
-    net.onlyLabels = {0};
+    netL.onlyLabels = netR.onlyLabels = {0};
+    netL.skip = netR.skip = 7;
+    // <- Init neural networks
 
-    VideoProcessor vidProc(faceRecognizer, stereo, net, samplesDir, faceClassifiersFile);
+    VideoProcessor vidProc(faceRecognizer, stereo, netL, netR, samplesDir, faceClassifiersFile);
 
     // Connect to tihngworx mqtt ->
     mqtt::async_client twMqtt(TW_addr, TW_topic + "-" + TW_id, mqtt_persist_dir);
@@ -186,6 +193,15 @@ int main(int argc, char **argv) {
 
     thread([]() {
         system("cd ~/projects/videoTrans/client/cmake-build-debug && ./videoTrans 127.0.0.1 12345");
+    }).detach();
+
+    int fps = 0, nFrames = 0;
+    thread([&]() {
+        while (true) {
+            this_thread::sleep_for(chrono::seconds(1));
+            fps = nFrames;
+            nFrames = 0;
+        }
     }).detach();
 
     log(INFO, "Server started on port", port);
@@ -240,6 +256,13 @@ int main(int argc, char **argv) {
                 imgs.emplace_back(img(roi));
             }
 
+            if (imgs.empty()) {
+                log(ERROR, "Cannot receive images");
+                log(WARNING, "Closing connection");
+                socket.close();
+                break;
+            }
+
 /*            if(recordVideo) {
                 if(imgs.size() >= 2)
                     writerL.write(imgs[1]);
@@ -253,7 +276,7 @@ int main(int argc, char **argv) {
             vidProc.processImages(imgs, data, todo);
             auto stop = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-            std::cout << duration.count() << std::endl;
+            log(INFO, "Time for process images:", duration.count(), "; FPS:", fps);
 
             if (data.count("speech")) {
                 publishData(twMqtt, "listened", data["speech"]);
@@ -272,6 +295,8 @@ int main(int argc, char **argv) {
             }
 
             socket.send(buffer(string(serealizeData(todo) + "\n")));
+
+            nFrames++;
         }
     }
 }

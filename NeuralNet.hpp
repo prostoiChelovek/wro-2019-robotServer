@@ -47,15 +47,21 @@ public:
 
     Net net;
 
-    bool ok = true;
+    bool ok = false;
+
+    // skip every Nth prediction
+    int skip = 0;
+    int skipped = 0;
+
+    NeuralNet() = default;
 
     NeuralNet(const string &modelFile, const string &configFIle, const string &labelsFile = "") {
         net = readNet(modelFile, configFIle);
         if (net.empty()) {
             log(ERROR, "Cannot load neural network from", modelFile, "and", configFIle);
-            ok = false;
         } else {
             outNames = net.getUnconnectedOutLayersNames();
+            ok = true;
         }
 
         if (!labelsFile.empty()) {
@@ -82,6 +88,12 @@ public:
     void predict(const Mat &img) {
         if (!ok)
             return;
+
+        if (skipped < skip) {
+            skipped++;
+            return;
+        } else
+            skipped = 0;
 
         Mat blob;
         blobFromImage(img, blob, scale, inpSize, Mean, swapRB, false);
@@ -130,6 +142,7 @@ public:
                     continue;
             }
 
+            fixBound(boxes[idx], img.size());
             predictions.emplace_back(boxes[idx], confidences[idx], classIds[idx]);
         }
     }

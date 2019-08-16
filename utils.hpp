@@ -11,6 +11,8 @@
 #include <mutex>
 #include <condition_variable>
 
+#include <opencv2/opencv.hpp>
+
 using namespace std;
 
 // https://stackoverflow.com/a/36763257/9577873
@@ -116,6 +118,37 @@ void findAndReplaceAll(std::string &data, const std::string &toSearch, const std
         // Get the next occurrence from the current position
         pos = data.find(toSearch, pos + replaceStr.size());
     }
+}
+
+bool fixBound(cv::Rect &rect, cv::Size imgSize) {
+    bool ok = true;
+
+    if (rect.width <= 0) {
+        rect.width = 0;
+        ok = false;
+    }
+    if (rect.height <= 0) {
+        rect.height = 0;
+        ok = false;
+    }
+    if (rect.x < 0) rect.x = 0;
+    if (rect.y < 0) rect.y = 0;
+    if (rect.x >= imgSize.width)
+        rect.x = imgSize.width - rect.width;
+    if (rect.y >= imgSize.height)
+        rect.y = imgSize.height - rect.height;
+    if (rect.x + rect.width > imgSize.width)
+        rect.width = imgSize.width - rect.x;
+    if (rect.y + rect.height > imgSize.height)
+        rect.height = imgSize.height - rect.y;
+    if (rect.width > imgSize.width)
+        rect.width = imgSize.width;
+    if (rect.height > imgSize.height)
+        rect.height = imgSize.height;
+    if (rect.x < 0) rect.x = 0;
+    if (rect.y < 0) rect.y = 0;
+
+    return ok;
 }
 
 #endif //VIDEOTRANS_UTILS_HPP
