@@ -5,3 +5,4 @@
 [submodule "modules/paho.mqtt.cpp"]
 	path = modules/paho.mqtt.cpp
 	url = https://github.com/eclipse/paho.mqtt.cpp.git
+	branch = master

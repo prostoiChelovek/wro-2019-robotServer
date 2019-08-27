@@ -30,7 +30,7 @@ const string TW_username = "mojordomo";
 const string TW_pwd = "12345678";
 const string TW_topic = "butler";
 const string TW_id = "0";
-const vector<string> TW_subscribe{"say"};
+const vector<string> TW_subscribe{"say", "command"};
 const int mqtt_qos = 1;
 const string mqtt_persist_dir = "data-persist";
 
@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
     faceRecognizer.recognition->setThreshold(.3);
     faceRecognizer.detectFreq = 3;
     faceRecognizer.recognizeFreq = 9;
-    faceRecognizer.checker.threshold = 0;
+    faceRecognizer.checker.threshold = -0.1;
     // <- Init face recognition module
 
     Stereo stereo(intrinsicFile, extrinsicFile, frameSize);
@@ -160,13 +160,12 @@ int main(int argc, char **argv) {
     // load two same networks for left and right frames
     // it used in point triangulation
     NeuralNet netL(weightsFile, configFile, netLabelsFile);
-    NeuralNet netR(weightsFile, configFile, netLabelsFile);
     // only person
-    netL.onlyLabels = netR.onlyLabels = {0};
-    netL.skip = netR.skip = 7;
+    netL.onlyLabels = {0};
+    netL.skip = 5;
     // <- Init neural networks
 
-    VideoProcessor vidProc(faceRecognizer, stereo, netL, netR, samplesDir, faceClassifiersFile);
+    VideoProcessor vidProc(faceRecognizer, stereo, netL, samplesDir, faceClassifiersFile);
 
     // Connect to tihngworx mqtt ->
     mqtt::async_client twMqtt(TW_addr, TW_topic + "-" + TW_id, mqtt_persist_dir);
@@ -192,7 +191,7 @@ int main(int argc, char **argv) {
     // <- Video recording
 
     thread([]() {
-        system("cd ~/projects/videoTrans/client/cmake-build-debug && ./videoTrans 127.0.0.1 12345");
+//        system("cd ~/projects/videoTrans/client/cmake-build-debug && ./videoTrans 127.0.0.1 12345");
     }).detach();
 
     int fps = 0, nFrames = 0;
@@ -276,20 +275,20 @@ int main(int argc, char **argv) {
             vidProc.processImages(imgs, data, todo);
             auto stop = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-            log(INFO, "Time for process images:", duration.count(), "; FPS:", fps);
+//            log(INFO, "Time for process images:", duration.count(), "; FPS:", fps);
 
             if (data.count("speech")) {
                 publishData(twMqtt, "listened", data["speech"]);
             }
             if (data.count("faces") > 0) {
-                if (data["faces"].empty())
-                    data.erase("faces");
-                else
-                    publishData(twMqtt, "faces", data["faces"]);
+                publishData(twMqtt, "faces", data["faces"]);
+            } else {
+                publishData(twMqtt, "faces", "");
             }
 
             while (!mqttMessages.empty()) {
                 auto msg = mqttMessages.front();
+                log(INFO, msg.first, ":", msg.second);
                 todo[msg.first] = msg.second;
                 mqttMessages.pop_front();
             }
