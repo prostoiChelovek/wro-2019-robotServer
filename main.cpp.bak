@@ -151,6 +151,7 @@ int main(int argc, char **argv) {
     faceRecognizer.recognition->setThreshold(.3);
     faceRecognizer.detectFreq = 3;
     faceRecognizer.recognizeFreq = 9;
+
     faceRecognizer.checker.threshold = -0.1;
     // <- Init face recognition module
 
@@ -286,7 +287,10 @@ int main(int argc, char **argv) {
                 publishData(twMqtt, "faces", "");
             }
 
-            if (data.count("security") > 0) {
+            if (vidProc.humans.no_humans_frames == 40) {
+                todo["command"] = "patrol";
+            }
+            if (vidProc.humans.no_humans_frames == 80) {
                 publishData(twMqtt, "enable_security", "1");
             }
 

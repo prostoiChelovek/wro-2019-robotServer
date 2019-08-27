@@ -88,6 +88,11 @@ public:
             }
             data["faces"] += label + ",";
         }
+        for (const Human &h : humans.humans) {
+            if (!h.face && h.frames_not_seen == 0) {
+                data["faces"] += "noface,";
+            }
+        }
         if (!data["faces"].empty())
             data["faces"].pop_back();
 
@@ -99,12 +104,6 @@ public:
         future_detect.wait();
 
         humans.update(faces.detector.faces, net.predictions);
-        if (humans.no_humans_frames >= 20) {
-            todo["command"] = "patrol";
-        }
-        if (humans.no_humans_frames >= 40) {
-            data["security"] = "on";
-        }
 
         faces.update();
 
