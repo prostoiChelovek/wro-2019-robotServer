@@ -16,6 +16,7 @@
 
 #include "Stereo.hpp"
 #include "NeuralNet.hpp"
+#include "Humans.hpp"
 
 using namespace std;
 using namespace cv;
@@ -24,13 +25,14 @@ class VideoProcessor {
 public:
     Faces::Faces &faces;
     Stereo &stereo;
-    NeuralNet &netL;
+    NeuralNet &net;
+    Humans humans;
 
     string faceSamplesDir, faceRecognizerFIle;
 
     VideoProcessor(Faces::Faces &faceRecognizer, Stereo &stereo, NeuralNet &netL,
                    string faceSamplesDir, string faceRecognizerFIle)
-            : faces(faceRecognizer), stereo(stereo), netL(netL),
+            : faces(faceRecognizer), stereo(stereo), net(netL),
               faceSamplesDir(faceSamplesDir),
               faceRecognizerFIle(faceRecognizerFIle) {
 
@@ -54,7 +56,7 @@ public:
         });
 
         std::future<void> future_detect = std::async(std::launch::async, [&] {
-            netL.predict(imgs[imgNum]);
+            net.predict(imgs[imgNum]);
         });
 
         if (imgs.size() > 1) {
@@ -96,6 +98,14 @@ public:
 
         future_detect.wait();
 
+        humans.update(faces.detector.faces, net.predictions);
+        if (humans.no_humans_frames >= 20) {
+            todo["command"] = "patrol";
+        }
+        if (humans.no_humans_frames >= 40) {
+            data["security"] = "on";
+        }
+
         faces.update();
 
         show(imgs, disp, dispL, dispR, imgNum);
@@ -121,7 +131,7 @@ public:
     void show(vector<Mat> &imgs, Mat &disp, Mat &dispL, Mat &dispR, int imgNum) {
         faces.draw(imgs[imgNum]);
 
-        netL.draw(imgs[imgNum]);
+        net.draw(imgs[imgNum]);
         if (imgs.size() > 1) {
             Mat disps;
             vconcat(dispL, dispR, disps);

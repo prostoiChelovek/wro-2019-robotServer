@@ -159,13 +159,13 @@ int main(int argc, char **argv) {
     // Init neural networks ->
     // load two same networks for left and right frames
     // it used in point triangulation
-    NeuralNet netL(weightsFile, configFile, netLabelsFile);
+    NeuralNet net(weightsFile, configFile, netLabelsFile);
     // only person
-    netL.onlyLabels = {0};
-    netL.skip = 5;
+    net.onlyLabels = {0};
+    net.skip = 5;
     // <- Init neural networks
 
-    VideoProcessor vidProc(faceRecognizer, stereo, netL, samplesDir, faceClassifiersFile);
+    VideoProcessor vidProc(faceRecognizer, stereo, net, samplesDir, faceClassifiersFile);
 
     // Connect to tihngworx mqtt ->
     mqtt::async_client twMqtt(TW_addr, TW_topic + "-" + TW_id, mqtt_persist_dir);
@@ -284,6 +284,10 @@ int main(int argc, char **argv) {
                 publishData(twMqtt, "faces", data["faces"]);
             } else {
                 publishData(twMqtt, "faces", "");
+            }
+
+            if (data.count("security") > 0) {
+                publishData(twMqtt, "enable_security", "1");
             }
 
             while (!mqttMessages.empty()) {
